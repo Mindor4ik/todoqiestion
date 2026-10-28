@@ -10,11 +10,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with: { gradle-version: "8.9" }
       - run: yes | sdkmanager --licenses > /dev/null || true
-      - run: unzip -q TodoQuest.zip
-      - run: echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> TodoQuest/gradle.properties
-      - run: sed -i 's/work-runtime-ktx:2.9.3/work-runtime-ktx:2.9.1/' TodoQuest/app/build.gradle.kts
-      - run: cd TodoQuest && gradle assembleRelease --no-daemon
+
+      - name: Unzip and locate project
+        run: |
+          unzip -l TodoQuest.zip | head -30
+          mkdir -p project
+          unzip -q TodoQuest.zip -d project
+          SETTINGS=$(find project -name 'settings.gradle*' | head -n1)
+          if [ -z "$SETTINGS" ]; then echo "settings.gradle not found in archive"; exit 1; fi
+          ROOT=$(dirname "$SETTINGS")
+          echo "Project root: $ROOT"
+          ls -la "$ROOT"
+          echo "PROJECT_DIR=$ROOT" >> "$GITHUB_ENV"
+
+      - name: Gradle memory settings
+        run: echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> "$PROJECT_DIR/gradle.properties"
+
+      - name: Pin work-runtime-ktx
+        run: sed -i 's/work-runtime-ktx:2.9.3/work-runtime-ktx:2.9.1/' "$PROJECT_DIR/app/build.gradle.kts"
+
+      - name: Build
+        run: cd "$PROJECT_DIR" && gradle assembleDebug --no-daemon
+
       - uses: actions/upload-artifact@v4
         with:
           name: TodoQuest-apk
-          path: TodoQuest/app/build/outputs/apk/release/app-release.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
